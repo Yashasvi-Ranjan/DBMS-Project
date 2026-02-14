@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Restaurant Dashboard - Food Waste Reduction</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Restaurant Dashboard</h1>
+        <div class="user-info">
+            <span id="welcomeMsg"></span>
+            <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>Add Food Donation</h2>
+            <form id="donationForm">
+                <input type="text" id="restaurantName" placeholder="Restaurant Name" required>
+                <input type="text" id="foodType" placeholder="Food Type" required>
+                <input type="number" id="quantity" placeholder="Quantity (Servings)" required>
+                <input type="datetime-local" id="expiryTime" required>
+                <button type="submit">Add Donation</button>
+            </form>
+        </section>
+
+        <section class="card">
+            <h2>Your Donations</h2>
+            <div id="donationList"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>SDG 12 - Responsible Consumption & Production</p>
+    </footer>
+
+    <script src="js/restaurant.js"></script>
+</body>
+</html>

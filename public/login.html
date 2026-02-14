@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - Food Waste Reduction</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <div class="auth-container">
+        <h1>Food Waste Reduction Platform</h1>
+
+        <div class="tab-bar">
+            <button id="loginTab" class="active" onclick="showTab('login')">Login</button>
+            <button id="registerTab" onclick="showTab('register')">Register</button>
+        </div>
+
+        <div class="auth-form">
+            <p class="error-msg" id="errorMsg"></p>
+
+            <form id="authForm">
+                <input type="text" id="username" placeholder="Username" required>
+                <input type="password" id="password" placeholder="Password" required>
+
+                <div class="role-select" id="roleGroup">
+                    <select id="role">
+                        <option value="restaurant">Restaurant</option>
+                        <option value="ngo">NGO</option>
+                    </select>
+                </div>
+
+                <button type="submit" id="submitBtn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p>SDG 12 - Responsible Consumption & Production</p>
+    </footer>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>
