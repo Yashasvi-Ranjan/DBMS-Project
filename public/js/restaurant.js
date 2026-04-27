@@ -42,10 +42,10 @@ async function fetchDonations() {
 donationForm.addEventListener("submit", async function (e) {
     e.preventDefault();
 
-    const restaurantName = document.getElementById("restaurantName").value;
-    const foodType = document.getElementById("foodType").value;
-    const quantity = document.getElementById("quantity").value;
-    const expiryTime = document.getElementById("expiryTime").value;
+    const foodType    = document.getElementById("foodType").value;
+    const quantity    = document.getElementById("quantity").value;
+    const expiryTime  = document.getElementById("expiryTime").value;
+    const pickupNotes = document.getElementById("pickupNotes").value;
 
     const res = await fetch("/api/donations", {
         method: "POST",
@@ -53,7 +53,7 @@ donationForm.addEventListener("submit", async function (e) {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + token
         },
-        body: JSON.stringify({ restaurantName, foodType, quantity, expiryTime })
+        body: JSON.stringify({ foodType, quantity, expiryTime, pickupNotes })
     });
 
     if (res.ok) {

@@ -7,18 +7,28 @@ function showTab(tab) {
     document.getElementById("roleGroup").classList.toggle("show", !isLogin);
     document.getElementById("submitBtn").textContent = isLogin ? "Login" : "Register";
     document.getElementById("errorMsg").textContent = "";
+    toggleRestaurantField();
+}
+
+function toggleRestaurantField() {
+    const role = document.getElementById("role").value;
+    const group = document.getElementById("restaurantNameGroup");
+    group.style.display = (!isLogin && role === "restaurant") ? "block" : "none";
 }
 
 document.getElementById("authForm").addEventListener("submit", async function (e) {
     e.preventDefault();
 
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
-    const role = document.getElementById("role").value;
-    const errorMsg = document.getElementById("errorMsg");
+    const username       = document.getElementById("username").value;
+    const password       = document.getElementById("password").value;
+    const role           = document.getElementById("role").value;
+    const restaurantName = document.getElementById("restaurantName").value;
+    const errorMsg       = document.getElementById("errorMsg");
 
-    const url = isLogin ? "/api/auth/login" : "/api/auth/register";
-    const body = isLogin ? { username, password } : { username, password, role };
+    const url  = isLogin ? "/api/auth/login" : "/api/auth/register";
+    const body = isLogin
+        ? { username, password }
+        : { username, password, role, restaurantName };
 
     try {
         const res = await fetch(url, {
@@ -37,6 +47,9 @@ document.getElementById("authForm").addEventListener("submit", async function (e
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
         localStorage.setItem("username", username);
+        if (data.restaurantName) {
+            localStorage.setItem("restaurantName", data.restaurantName);
+        }
 
         window.location.href = data.role === "restaurant"
             ? "/restaurant.html"

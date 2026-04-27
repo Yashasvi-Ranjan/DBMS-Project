@@ -23,10 +23,14 @@
                 <input type="password" id="password" placeholder="Password" required>
 
                 <div class="role-select" id="roleGroup">
-                    <select id="role">
+                    <select id="role" onchange="toggleRestaurantField()">
                         <option value="restaurant">Restaurant</option>
                         <option value="ngo">NGO</option>
                     </select>
+                </div>
+
+                <div id="restaurantNameGroup" style="display:none;">
+                    <input type="text" id="restaurantName" placeholder="Restaurant Name">
                 </div>
 
                 <button type="submit" id="submitBtn">Login</button>
