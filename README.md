@@ -200,30 +200,13 @@ food_donations(id, user_id, restaurant_name, food_type,
 
 ✔ Both tables satisfy **2NF**.
 
-### 8.4 Third Normal Form (3NF) — Violation Found & Fixed
+### 8.4 Third Normal Form (3NF)
 
 **Condition:** Must be in 2NF and there must be no transitive dependencies.
 
-**Violation Identified in `food_donations`:**
+**Analysis:**
 
-```
-id → user_id → restaurant_name
-```
-
-- `user_id` is a non-key attribute in `food_donations`.
-- A restaurant user always has exactly one restaurant name, so `user_id → restaurant_name` holds.
-- This is a **transitive dependency**: `id → user_id → restaurant_name`.
-- **Consequence:** Updating a restaurant's name requires modifying every row in `food_donations` — an update anomaly.
-
-**Fix Applied — Decomposition:**
-
-`restaurant_name` was removed from `food_donations` and added to the `users` table, where it depends directly on `id` (the primary key).
-
-```sql
--- Before (3NF violation):
-food_donations(id, user_id, restaurant_name, food_type, ...)
-
--- After (3NF satisfied):
+-- 3NF satisfied:
 users(id, username, password, role, restaurant_name, ...)
 food_donations(id, user_id, food_type, quantity, ...)
 
