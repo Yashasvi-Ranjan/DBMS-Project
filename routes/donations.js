@@ -59,7 +59,7 @@ router.get("/", verifyToken, (req, res) => {
     });
 });
 
-// Claim Donation (NGO only) — uses ClaimDonation stored procedure
+// Claim Donation (NGO only)
 router.put("/:id/claim", verifyToken, (req, res) => {
     if (req.user.role !== "ngo") {
         return res.status(403).json({ message: "Only NGOs can claim donations" });
@@ -68,19 +68,84 @@ router.put("/:id/claim", verifyToken, (req, res) => {
     const donationId = req.params.id;
     const ngoUserId  = req.user.id;
 
-    const sql = `CALL ClaimDonation(?, ?, @success, @message)`;
+    db.getConnection((connErr, connection) => {
+        if (connErr) {
+            return res.status(500).json({ message: "Database connection failed" });
+        }
 
-    db.query(sql, [donationId, ngoUserId], (err) => {
-        if (err) return res.status(500).send(err);
+        const fail = (status, message, err) => {
+            connection.rollback(() => {
+                connection.release();
+                if (err) console.error(err);
+                res.status(status).json({ message });
+            });
+        };
 
-        db.query("SELECT @success AS success, @message AS message", (err2, rows) => {
-            if (err2) return res.status(500).send(err2);
-
-            const { success, message } = rows[0];
-            if (!success) {
-                return res.status(400).json({ message });
+        connection.beginTransaction((txErr) => {
+            if (txErr) {
+                connection.release();
+                return res.status(500).json({ message: "Could not start claim transaction" });
             }
-            res.json({ message });
+
+            const selectSql = `
+                SELECT status
+                FROM food_donations
+                WHERE id = ?
+                FOR UPDATE
+            `;
+
+            connection.query(selectSql, [donationId], (selectErr, rows) => {
+                if (selectErr) {
+                    return fail(500, "Could not check donation status", selectErr);
+                }
+
+                if (rows.length === 0) {
+                    return fail(404, "Donation not found");
+                }
+
+                const status = rows[0].status;
+                if (status !== "Available") {
+                    return fail(400, "Donation is already " + status);
+                }
+
+                connection.query(
+                    "UPDATE food_donations SET status = 'Claimed' WHERE id = ?",
+                    [donationId],
+                    (updateErr) => {
+                        if (updateErr) {
+                            return fail(500, "Could not update donation status", updateErr);
+                        }
+
+                        connection.query(
+                            "INSERT INTO donation_claims (donation_id, ngo_user_id) VALUES (?, ?)",
+                            [donationId, ngoUserId],
+                            (claimErr) => {
+                                if (claimErr) {
+                                    return fail(500, "Could not save donation claim", claimErr);
+                                }
+
+                                const auditSql = `
+                                    INSERT INTO audit_log
+                                    (action, table_name, record_id, old_value, new_value, performed_by)
+                                    VALUES ('CLAIM', 'food_donations', ?, 'Available', 'Claimed', ?)
+                                `;
+
+                                connection.query(auditSql, [donationId, ngoUserId], (auditErr) => {
+                                    if (auditErr) console.error(auditErr);
+                                    connection.commit((commitErr) => {
+                                        if (commitErr) {
+                                            return fail(500, "Could not complete donation claim", commitErr);
+                                        }
+
+                                        connection.release();
+                                        res.json({ message: "Donation claimed successfully" });
+                                    });
+                                });
+                            }
+                        );
+                    }
+                );
+            });
         });
     });
 });

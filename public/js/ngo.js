@@ -52,7 +52,13 @@ async function claimDonation(id) {
 
     if (res.ok) {
         fetchDonations();
+        return;
     }
+
+    const data = await res.json().catch(function () {
+        return { message: "Unable to claim donation" };
+    });
+    alert(data.message || "Unable to claim donation");
 }
 
 function logout() {

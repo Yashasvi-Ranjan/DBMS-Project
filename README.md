@@ -73,7 +73,7 @@ The proposed system provides a structured relational database solution to manage
 - User Registration & Authentication Module
 - Donation Creation Module
 - Donation Listing Module (with JOIN-based retrieval)
-- Donation Claim Workflow (via stored procedure with row-level locking)
+- Donation Claim Workflow (via Express API transaction with row-level locking)
 - Expiry & Status Lifecycle Management Module (trigger + cursor procedure)
 - Audit Logging Module (via triggers writing to `audit_log` table)
 
@@ -100,7 +100,7 @@ The system focuses primarily on backend database operations and API-based integr
 4. An **AFTER INSERT trigger** automatically writes a record to `audit_log`.
 5. Donation details are stored in the `food_donations` table.
 6. NGO logs in and views available donations via a JOIN query on `food_donations` and `users`.
-7. NGO claims a donation — the `ClaimDonation` stored procedure runs atomically inside a transaction with row-level locking (`FOR UPDATE`) to prevent race conditions.
+7. NGO claims a donation — the Express API starts a MySQL transaction, locks the selected donation row with `FOR UPDATE`, updates the donation status, inserts a `donation_claims` record, and commits atomically to prevent race conditions.
 8. An **AFTER UPDATE trigger** logs every status change to `audit_log`.
 9. Expired donations are auto-updated by the `ExpireOldDonations` stored procedure (uses a cursor to iterate row by row).
 
@@ -396,6 +396,9 @@ END
 ```
 
 **2. ClaimDonation** — Atomically claims a donation with row-level locking:
+
+> Note: The SQL script includes this stored procedure as the database-level implementation of the claim workflow. The running Express API currently performs the same claim transaction directly in `routes/donations.js` so the web app does not depend on the procedure being installed in the active MySQL database.
+
 ```sql
 CREATE PROCEDURE ClaimDonation(
     IN p_donation_id INT, IN p_ngo_user_id INT,
@@ -578,14 +581,14 @@ ROLLBACK;
 
 | Property | How It Is Ensured |
 |---|---|
-| **Atomicity** | All operations in `ClaimDonation` and `AddDonation` either commit fully or roll back entirely via `EXIT HANDLER` |
+| **Atomicity** | Claim operations in the Express API transaction and donation insertion in `AddDonation` either commit fully or roll back entirely |
 | **Consistency** | Triggers enforce business rules (quantity > 0, future expiry); FK constraints prevent orphan records; ENUM restricts status values |
-| **Isolation** | `SELECT ... FOR UPDATE` in `ClaimDonation` locks the row so two NGOs cannot claim the same donation concurrently |
+| **Isolation** | `SELECT ... FOR UPDATE` in the claim transaction locks the row so two NGOs cannot claim the same donation concurrently |
 | **Durability** | Every committed transaction is persisted by MySQL's InnoDB engine to disk via its write-ahead log |
 
 ### 10.3 Concurrency Control
 
-The `ClaimDonation` stored procedure uses **pessimistic locking** (`SELECT ... FOR UPDATE`) to prevent race conditions. Only one transaction can hold the row lock at a time; a second concurrent claim must wait, then sees status = 'Claimed' and is safely rejected.
+The NGO claim workflow uses **pessimistic locking** (`SELECT ... FOR UPDATE`) inside a MySQL transaction to prevent race conditions. Only one transaction can hold the row lock at a time; a second concurrent claim must wait, then sees status = 'Claimed' and is safely rejected.
 
 The `UNIQUE KEY uq_one_claim (donation_id)` in `donation_claims` provides an additional database-level guard against duplicate claims even without the lock.
 
@@ -610,7 +613,7 @@ The `UNIQUE KEY uq_one_claim (donation_id)` in `donation_claims` provides an add
 
 - A properly structured, fully normalised (3NF) relational database with 4 tables
 - Complete SQL implementation: DDL (CREATE, ALTER, DROP), DML (INSERT, UPDATE, DELETE), and advanced SELECT (JOINs, subqueries, aggregates, GROUP BY, HAVING, Views)
-- 4 stored procedures automating core business workflows
+- 4 stored procedures provided in the SQL script for core database workflows
 - 3 user-defined functions for data querying
 - 4 database triggers for input validation and audit logging
 - Cursor-based batch processing for expiry management
