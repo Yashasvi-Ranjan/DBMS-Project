@@ -27,11 +27,10 @@ router.post("/", verifyToken, async (req, res) => {
 
         res.json({ message: "Donation added successfully" });
     } catch (err) {
-        if (err.errorNum === 20001) {
-            return res.status(400).json({ message: "Quantity must be a positive number" });
-        }
-        if (err.errorNum === 20002) {
-            return res.status(400).json({ message: "Expiry time must be in the future" });
+        if (err.errorNum === 20001 || err.errorNum === 20002) {
+            // Extract the message text from Oracle's "ORA-20001: <message>" format
+            const match = err.message.match(/ORA-\d+:\s*(.*)/);
+            return res.status(400).json({ message: match ? match[1].trim() : err.message });
         }
         console.error(err);
         res.status(500).json({ message: "Server error" });
