@@ -482,6 +482,7 @@ BEGIN
         WHERE u.id = p_user_id
         GROUP BY u.id, u.restaurant_name;
 END GetRestaurantReport;
+```
 
 ---
 
