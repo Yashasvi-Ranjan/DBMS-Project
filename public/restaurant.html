@@ -20,10 +20,11 @@
             <h2>Add Food Donation</h2>
             <form id="donationForm">
                 <input type="text" id="foodType" placeholder="Food Type" required>
-                <input type="number" id="quantity" placeholder="Quantity (Servings)" min="1" required>
+                <input type="number" id="quantity" placeholder="Quantity (Servings)" required>
                 <input type="datetime-local" id="expiryTime" required>
                 <input type="text" id="pickupNotes" placeholder="Pickup Notes (optional)">
                 <button type="submit">Add Donation</button>
+                <div id="formFeedback" class="form-feedback" style="display:none;"></div>
             </form>
         </section>
 

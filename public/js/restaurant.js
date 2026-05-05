@@ -39,15 +39,24 @@ async function fetchDonations() {
     });
 }
 
+const formFeedback = document.getElementById("formFeedback");
+
+function showFeedback(message, isError) {
+    formFeedback.textContent = isError ? "Oracle Trigger Error: " + message : message;
+    formFeedback.className   = "form-feedback " + (isError ? "form-feedback-error" : "form-feedback-success");
+    formFeedback.style.display = "block";
+}
+
 donationForm.addEventListener("submit", async function (e) {
     e.preventDefault();
+    formFeedback.style.display = "none";
 
     const foodType    = document.getElementById("foodType").value;
     const quantity    = document.getElementById("quantity").value;
     const expiryTime  = document.getElementById("expiryTime").value;
     const pickupNotes = document.getElementById("pickupNotes").value;
 
-    const res = await fetch("/api/donations", {
+    const res  = await fetch("/api/donations", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -56,9 +65,14 @@ donationForm.addEventListener("submit", async function (e) {
         body: JSON.stringify({ foodType, quantity, expiryTime, pickupNotes })
     });
 
+    const data = await res.json();
+
     if (res.ok) {
         donationForm.reset();
+        showFeedback("Donation added successfully!", false);
         fetchDonations();
+    } else {
+        showFeedback(data.message, true);
     }
 });
 

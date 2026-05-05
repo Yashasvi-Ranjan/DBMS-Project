@@ -1,19 +1,41 @@
 require("dotenv").config();
-const mysql = require("mysql2");
+const oracledb = require("oracledb");
 
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    waitForConnections: true,
-    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10
-});
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 
-db.getConnection((err, connection) => {
-    if (err) throw err;
-    console.log("Connected to MySQL");
-    connection.release();
-});
+let pool;
 
-module.exports = db;
+async function initialize() {
+    pool = await oracledb.createPool({
+        user:          process.env.DB_USER,
+        password:      process.env.DB_PASSWORD,
+        connectString: process.env.DB_CONNECT_STRING,
+        poolMax:       parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
+        poolMin:       1,
+        poolIncrement: 1
+    });
+    console.log("Connected to Oracle DB");
+}
+
+async function execute(sql, binds = {}, opts = {}) {
+    const conn = await pool.getConnection();
+    try {
+        return await conn.execute(sql, binds, { autoCommit: true, ...opts });
+    } finally {
+        await conn.close();
+    }
+}
+
+async function getConnection() {
+    return pool.getConnection();
+}
+
+// Oracle returns column names in uppercase — convert to lowercase for the frontend
+function mapRows(rows) {
+    if (!Array.isArray(rows)) return [];
+    return rows.map(row =>
+        Object.fromEntries(Object.entries(row).map(([k, v]) => [k.toLowerCase(), v]))
+    );
+}
+
+module.exports = { initialize, execute, getConnection, mapRows };

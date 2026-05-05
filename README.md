@@ -32,7 +32,7 @@ A Database Management System (DBMS) provides:
 - Secure multi-user operations with transaction management
 - Automation through triggers and stored procedures
 
-This project emphasises relational database design, normalisation (up to 3NF), and complete backend implementation using Oracle PL/SQL — including stored procedures, functions, triggers, cursors, views, and transaction control. Oracle Database Free 23c is run locally via Docker.
+This project emphasises relational database design, normalisation (up to 3NF), and complete backend implementation using Oracle PL/SQL — including stored procedures, functions, triggers, cursors, views, and transaction control. Oracle Database 21c Express Edition (XE) is installed locally and accessed via Oracle SQL Developer.
 
 ---
 
@@ -87,12 +87,11 @@ The system focuses primarily on backend database operations and API-based integr
 
 | Layer | Technology |
 |---|---|
-| Database | Oracle Database Free 23c (via Docker) |
+| Database | Oracle Database 21c Express Edition (XE) |
 | Backend | Node.js + Express.js |
 | Frontend | HTML, CSS, JavaScript |
 | Authentication | JWT + bcryptjs |
-| DB Interface | SQL\*Plus (inside Docker container) |
-| Container | Docker + Docker Compose |
+| DB Interface | Oracle SQL Developer / SQLcl |
 
 **Working of the System:**
 1. Restaurant registers (username, password, restaurant name stored in `users` table).
@@ -240,6 +239,16 @@ In each table, every non-key attribute depends *directly* on the primary key alo
 
 ## 9. Database Implementation
 
+### 9.0 SQL Script Files
+
+The database initialisation is split across three files, to be run in order in Oracle SQL Developer (F5 — Run Script):
+
+| File | Contents | Run Order |
+|---|---|---|
+| `init/01_schema.sql` | CREATE TABLE, ALTER TABLE, CREATE INDEX, CREATE VIEW | 1st |
+| `init/02_plsql.sql` | Stored Procedures, Functions, Triggers | 2nd |
+| `init/03_data_ops.sql` | Maintenance DML, SELECT queries, procedure test calls | 3rd |
+
 ### 9.1 SQL Implementation
 
 **DDL Commands Used:**
@@ -265,8 +274,8 @@ ALTER TABLE users RENAME COLUMN email TO contact_email;
 
 ```sql
 -- INSERT: user registration, donation creation, claim recording
-INSERT INTO users (username, password, role, restaurant_name) VALUES (?, ?, ?, ?);
-INSERT INTO food_donations (user_id, food_type, quantity, expiry_time) VALUES (?, ?, ?, ?);
+INSERT INTO users (username, password, role, restaurant_name) VALUES (:username, :password, :role, :restaurant_name);
+INSERT INTO food_donations (user_id, food_type, quantity, expiry_time) VALUES (:user_id, :food_type, :quantity, :expiry_time);
 
 -- UPDATE: status transitions
 UPDATE food_donations SET status = 'Expired'
@@ -580,7 +589,7 @@ ROLLBACK;
 
 ### 10.3 Concurrency Control
 
-The NGO claim workflow uses **pessimistic locking** (`SELECT ... FOR UPDATE`) inside a MySQL transaction to prevent race conditions. Only one transaction can hold the row lock at a time; a second concurrent claim must wait, then sees status = 'Claimed' and is safely rejected.
+The NGO claim workflow uses **pessimistic locking** (`SELECT ... FOR UPDATE`) inside an Oracle transaction to prevent race conditions. Only one transaction can hold the row lock at a time; a second concurrent claim must wait, then sees status = 'Claimed' and is safely rejected.
 
 The `UNIQUE KEY uq_one_claim (donation_id)` in `donation_claims` provides an additional database-level guard against duplicate claims even without the lock.
 
@@ -590,9 +599,8 @@ The `UNIQUE KEY uq_one_claim (donation_id)` in `donation_claims` provides an add
 
 | Category | Tool / Technology | Purpose |
 |---|---|---|
-| DBMS | Oracle Database Free 23c | Relational database, PL/SQL stored procedures, triggers, functions |
-| Container | Docker + Docker Compose | Runs Oracle DB locally without a native install |
-| DB Interface | SQL\*Plus (inside Docker) | Schema design and query testing |
+| DBMS | Oracle Database 21c Express Edition (XE) | Relational database, PL/SQL stored procedures, triggers, functions |
+| DB Interface | Oracle SQL Developer | Schema design, query testing, and running SQL init scripts |
 | Query Language | SQL (DDL, DML, DQL) | All database operations |
 | Procedural SQL | Oracle PL/SQL — Procedures, Functions, Triggers, Cursors | DB-level business logic & automation |
 | Backend | Node.js + Express.js | REST API and routing |

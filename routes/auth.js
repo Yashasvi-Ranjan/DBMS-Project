@@ -1,7 +1,8 @@
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const db = require("../config/db");
+const express   = require("express");
+const bcrypt    = require("bcryptjs");
+const jwt       = require("jsonwebtoken");
+const oracledb  = require("oracledb");
+const db        = require("../config/db");
 const { JWT_SECRET } = require("../middleware/auth");
 
 const router = express.Router();
@@ -13,67 +14,82 @@ router.post("/register", async (req, res) => {
     if (!username || !password || !role) {
         return res.status(400).json({ message: "All fields are required" });
     }
-
     if (!["restaurant", "ngo"].includes(role)) {
         return res.status(400).json({ message: "Role must be 'restaurant' or 'ngo'" });
     }
-
     if (role === "restaurant" && !restaurantName) {
         return res.status(400).json({ message: "Restaurant name is required for restaurant accounts" });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-    const sql = "INSERT INTO users (username, password, role, restaurant_name) VALUES (?, ?, ?, ?)";
-    db.query(sql, [username, hashedPassword, role, restaurantName || null], (err, result) => {
-        if (err) {
-            if (err.code === "ER_DUP_ENTRY") {
-                return res.status(409).json({ message: "Username already exists" });
-            }
-            return res.status(500).json({ message: "Server error" });
-        }
+        const sql = `
+            INSERT INTO users (username, password, role, restaurant_name)
+            VALUES (:username, :password, :role, :restaurant_name)
+            RETURNING id INTO :new_id
+        `;
+        const binds = {
+            username,
+            password:        hashedPassword,
+            role,
+            restaurant_name: restaurantName || null,
+            new_id:          { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
+        };
+
+        const result = await db.execute(sql, binds);
+        const newId  = result.outBinds.new_id[0];
 
         const token = jwt.sign(
-            { id: result.insertId, username, role, restaurantName: restaurantName || null },
+            { id: newId, username, role, restaurantName: restaurantName || null },
             JWT_SECRET,
             { expiresIn: "24h" }
         );
 
         res.json({ token, role, restaurantName: restaurantName || null });
-    });
+    } catch (err) {
+        if (err.errorNum === 1) {
+            return res.status(409).json({ message: "Username already exists" });
+        }
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
 // Login
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ message: "All fields are required" });
     }
 
-    const sql = "SELECT * FROM users WHERE username = ?";
-    db.query(sql, [username], async (err, results) => {
-        if (err) return res.status(500).json({ message: "Server error" });
+    try {
+        const sql    = `SELECT id, username, password, role, restaurant_name FROM users WHERE username = :username`;
+        const result = await db.execute(sql, { username });
 
-        if (results.length === 0) {
+        if (result.rows.length === 0) {
             return res.status(401).json({ message: "Invalid username or password" });
         }
 
-        const user = results[0];
-        const isMatch = await bcrypt.compare(password, user.password);
+        const user    = result.rows[0];
+        const isMatch = await bcrypt.compare(password, user.PASSWORD);
 
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid username or password" });
         }
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, restaurantName: user.restaurant_name || null },
+            { id: user.ID, username: user.USERNAME, role: user.ROLE, restaurantName: user.RESTAURANT_NAME || null },
             JWT_SECRET,
             { expiresIn: "24h" }
         );
 
-        res.json({ token, role: user.role, restaurantName: user.restaurant_name || null });
-    });
+        res.json({ token, role: user.ROLE, restaurantName: user.RESTAURANT_NAME || null });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
 module.exports = router;

@@ -1,153 +1,136 @@
-const express = require("express");
-const db = require("../config/db");
+const express  = require("express");
+const db       = require("../config/db");
 const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
 
 // Add Donation (restaurant only)
-router.post("/", verifyToken, (req, res) => {
+router.post("/", verifyToken, async (req, res) => {
     if (req.user.role !== "restaurant") {
         return res.status(403).json({ message: "Only restaurants can add donations" });
     }
 
     const { foodType, quantity, expiryTime, pickupNotes } = req.body;
 
-    const sql = `
-        INSERT INTO food_donations
-        (user_id, food_type, quantity, expiry_time, pickup_notes)
-        VALUES (?, ?, ?, ?, ?)
-    `;
-
-    db.query(sql, [req.user.id, foodType, quantity, expiryTime, pickupNotes || null],
-        (err, result) => {
-            if (err) return res.status(500).send(err);
-            res.json({ message: "Donation added successfully" });
+    try {
+        const sql = `
+            INSERT INTO food_donations (user_id, food_type, quantity, expiry_time, pickup_notes)
+            VALUES (:user_id, :food_type, :quantity, :expiry_time, :pickup_notes)
+        `;
+        await db.execute(sql, {
+            user_id:      req.user.id,
+            food_type:    foodType,
+            quantity:     Number(quantity),
+            expiry_time:  new Date(expiryTime),
+            pickup_notes: pickupNotes || null
         });
+
+        res.json({ message: "Donation added successfully" });
+    } catch (err) {
+        if (err.errorNum === 20001) {
+            return res.status(400).json({ message: "Quantity must be a positive number" });
+        }
+        if (err.errorNum === 20002) {
+            return res.status(400).json({ message: "Expiry time must be in the future" });
+        }
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
 // Get Donations — restaurants see only their own; NGOs see all
-router.get("/", verifyToken, (req, res) => {
-    const expireQuery = `
-        UPDATE food_donations
-        SET status = 'Expired'
-        WHERE expiry_time < NOW()
-        AND status = 'Available'
-    `;
-    db.query(expireQuery);
+router.get("/", verifyToken, async (req, res) => {
+    try {
+        // Auto-expire overdue donations
+        await db.execute(`
+            UPDATE food_donations
+            SET status = 'Expired'
+            WHERE expiry_time < SYSTIMESTAMP
+              AND status = 'Available'
+        `);
 
-    const isRestaurant = req.user.role === "restaurant";
-    const sql = `
-        SELECT
-            fd.id,
-            u.restaurant_name,
-            fd.food_type,
-            fd.quantity,
-            fd.expiry_time,
-            fd.status,
-            fd.pickup_notes,
-            fd.created_at
-        FROM food_donations fd
-        INNER JOIN users u ON fd.user_id = u.id
-        ${isRestaurant ? "WHERE fd.user_id = ?" : ""}
-        ORDER BY fd.created_at DESC
-    `;
-    const params = isRestaurant ? [req.user.id] : [];
+        const isRestaurant = req.user.role === "restaurant";
+        const sql = `
+            SELECT
+                fd.id,
+                u.restaurant_name,
+                fd.food_type,
+                fd.quantity,
+                fd.expiry_time,
+                fd.status,
+                fd.pickup_notes,
+                fd.created_at
+            FROM food_donations fd
+            INNER JOIN users u ON fd.user_id = u.id
+            ${isRestaurant ? "WHERE fd.user_id = :user_id" : ""}
+            ORDER BY fd.created_at DESC
+        `;
+        const binds  = isRestaurant ? { user_id: req.user.id } : {};
+        const result = await db.execute(sql, binds);
 
-    db.query(sql, params, (err, results) => {
-        if (err) return res.status(500).send(err);
-        res.json(results);
-    });
+        res.json(db.mapRows(result.rows));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
 // Claim Donation (NGO only)
-router.put("/:id/claim", verifyToken, (req, res) => {
+router.put("/:id/claim", verifyToken, async (req, res) => {
     if (req.user.role !== "ngo") {
         return res.status(403).json({ message: "Only NGOs can claim donations" });
     }
 
-    const donationId = req.params.id;
+    const donationId = Number(req.params.id);
     const ngoUserId  = req.user.id;
+    const conn       = await db.getConnection();
 
-    db.getConnection((connErr, connection) => {
-        if (connErr) {
-            return res.status(500).json({ message: "Database connection failed" });
+    try {
+        const selectResult = await conn.execute(
+            `SELECT status FROM food_donations WHERE id = :id FOR UPDATE`,
+            { id: donationId },
+            { autoCommit: false }
+        );
+
+        if (selectResult.rows.length === 0) {
+            await conn.rollback();
+            return res.status(404).json({ message: "Donation not found" });
         }
 
-        const fail = (status, message, err) => {
-            connection.rollback(() => {
-                connection.release();
-                if (err) console.error(err);
-                res.status(status).json({ message });
-            });
-        };
+        const status = selectResult.rows[0].STATUS;
+        if (status !== "Available") {
+            await conn.rollback();
+            return res.status(400).json({ message: "Donation is already " + status });
+        }
 
-        connection.beginTransaction((txErr) => {
-            if (txErr) {
-                connection.release();
-                return res.status(500).json({ message: "Could not start claim transaction" });
-            }
+        await conn.execute(
+            `UPDATE food_donations SET status = 'Claimed' WHERE id = :id`,
+            { id: donationId },
+            { autoCommit: false }
+        );
 
-            const selectSql = `
-                SELECT status
-                FROM food_donations
-                WHERE id = ?
-                FOR UPDATE
-            `;
+        await conn.execute(
+            `INSERT INTO donation_claims (donation_id, ngo_user_id) VALUES (:donation_id, :ngo_user_id)`,
+            { donation_id: donationId, ngo_user_id: ngoUserId },
+            { autoCommit: false }
+        );
 
-            connection.query(selectSql, [donationId], (selectErr, rows) => {
-                if (selectErr) {
-                    return fail(500, "Could not check donation status", selectErr);
-                }
+        await conn.execute(
+            `INSERT INTO audit_log (action, table_name, record_id, old_value, new_value, performed_by)
+             VALUES ('CLAIM', 'food_donations', :record_id, 'Available', 'Claimed', :performed_by)`,
+            { record_id: donationId, performed_by: ngoUserId },
+            { autoCommit: false }
+        );
 
-                if (rows.length === 0) {
-                    return fail(404, "Donation not found");
-                }
-
-                const status = rows[0].status;
-                if (status !== "Available") {
-                    return fail(400, "Donation is already " + status);
-                }
-
-                connection.query(
-                    "UPDATE food_donations SET status = 'Claimed' WHERE id = ?",
-                    [donationId],
-                    (updateErr) => {
-                        if (updateErr) {
-                            return fail(500, "Could not update donation status", updateErr);
-                        }
-
-                        connection.query(
-                            "INSERT INTO donation_claims (donation_id, ngo_user_id) VALUES (?, ?)",
-                            [donationId, ngoUserId],
-                            (claimErr) => {
-                                if (claimErr) {
-                                    return fail(500, "Could not save donation claim", claimErr);
-                                }
-
-                                const auditSql = `
-                                    INSERT INTO audit_log
-                                    (action, table_name, record_id, old_value, new_value, performed_by)
-                                    VALUES ('CLAIM', 'food_donations', ?, 'Available', 'Claimed', ?)
-                                `;
-
-                                connection.query(auditSql, [donationId, ngoUserId], (auditErr) => {
-                                    if (auditErr) console.error(auditErr);
-                                    connection.commit((commitErr) => {
-                                        if (commitErr) {
-                                            return fail(500, "Could not complete donation claim", commitErr);
-                                        }
-
-                                        connection.release();
-                                        res.json({ message: "Donation claimed successfully" });
-                                    });
-                                });
-                            }
-                        );
-                    }
-                );
-            });
-        });
-    });
+        await conn.commit();
+        res.json({ message: "Donation claimed successfully" });
+    } catch (err) {
+        await conn.rollback();
+        console.error(err);
+        res.status(500).json({ message: "Could not complete donation claim" });
+    } finally {
+        await conn.close();
+    }
 });
 
 module.exports = router;
