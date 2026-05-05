@@ -1,16 +1,5 @@
--- ============================================================
--- FILE 3 OF 3 : DML Operations & Test Queries
--- Run this file AFTER 01_schema.sql and 02_plsql.sql
--- No seed data — all data is added through the application.
--- ============================================================
 SET DEFINE OFF
 SET SERVEROUTPUT ON
-
-
--- ----------------------------------------------------------------
--- MAINTENANCE DML
--- Mark any Available donations whose expiry has passed as Expired
--- ----------------------------------------------------------------
 
 UPDATE food_donations
 SET status = 'Expired'
@@ -19,17 +8,11 @@ WHERE expiry_time < SYSTIMESTAMP
 
 COMMIT;
 
--- Purge Expired donations older than 7 days
 DELETE FROM food_donations
 WHERE status = 'Expired'
   AND created_at < SYSTIMESTAMP - INTERVAL '7' DAY;
 
 COMMIT;
-
-
--- ----------------------------------------------------------------
--- SELECT QUERIES
--- ----------------------------------------------------------------
 
 -- 1. All currently available donations (sorted by nearest expiry first)
 SELECT
@@ -185,6 +168,28 @@ DECLARE
 BEGIN
     ExpireOldDonations(v_expired_count);
     DBMS_OUTPUT.PUT_LINE('Donations just expired: ' || v_expired_count);
+END;
+/
+
+-- Test GetExpiredDonations
+DECLARE
+    v_cursor        SYS_REFCURSOR;
+    v_id            NUMBER;
+    v_restaurant    VARCHAR2(100);
+    v_food_type     VARCHAR2(100);
+    v_quantity      NUMBER;
+    v_expiry_time   TIMESTAMP;
+    v_created_at    TIMESTAMP;
+BEGIN
+    GetExpiredDonations(v_cursor);
+    LOOP
+        FETCH v_cursor INTO v_id, v_restaurant, v_food_type, v_quantity, v_expiry_time, v_created_at;
+        EXIT WHEN v_cursor%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE('ID: ' || v_id || ' | Restaurant: ' || v_restaurant ||
+                             ' | Food: ' || v_food_type || ' | Qty: ' || v_quantity ||
+                             ' | Expired: ' || TO_CHAR(v_expiry_time, 'YYYY-MM-DD HH24:MI:SS'));
+    END LOOP;
+    CLOSE v_cursor;
 END;
 /
 

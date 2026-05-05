@@ -1,14 +1,5 @@
--- ============================================================
--- FILE 1 OF 3 : Schema Definition
--- Run this file FIRST, before 02_plsql.sql and 03_data_ops.sql
--- ============================================================
 SET DEFINE OFF
 SET SERVEROUTPUT ON
-
-
--- ----------------------------------------------------------------
--- TABLES
--- ----------------------------------------------------------------
 
 CREATE TABLE users (
     id              NUMBER          GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -56,31 +47,16 @@ CREATE TABLE audit_log (
     action_time  TIMESTAMP       DEFAULT SYSTIMESTAMP
 );
 
-
--- ----------------------------------------------------------------
--- ALTER TABLE (column additions / renames)
--- ----------------------------------------------------------------
-
 ALTER TABLE food_donations ADD (pickup_location VARCHAR2(255) DEFAULT NULL);
 
 ALTER TABLE users ADD (email VARCHAR2(150) DEFAULT NULL);
 
 ALTER TABLE users RENAME COLUMN email TO contact_email;
 
-
--- ----------------------------------------------------------------
--- INDEXES
--- ----------------------------------------------------------------
-
 CREATE INDEX idx_donations_user_id  ON food_donations(user_id);
 CREATE INDEX idx_donations_status   ON food_donations(status);
 CREATE INDEX idx_donations_expiry   ON food_donations(expiry_time);
 CREATE INDEX idx_audit_table_record ON audit_log(table_name, record_id);
-
-
--- ----------------------------------------------------------------
--- VIEWS
--- ----------------------------------------------------------------
 
 CREATE OR REPLACE VIEW available_donations_view AS
 SELECT

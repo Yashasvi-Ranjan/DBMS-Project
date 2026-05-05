@@ -1,17 +1,6 @@
--- ============================================================
--- FILE 2 OF 3 : PL/SQL Objects (Procedures, Functions, Triggers)
--- Run this file AFTER 01_schema.sql and BEFORE 03_data_ops.sql
--- ============================================================
 SET DEFINE OFF
 SET SERVEROUTPUT ON
 
-
--- ----------------------------------------------------------------
--- PROCEDURES
--- ----------------------------------------------------------------
-
--- Adds a new food donation after validating quantity and expiry time.
--- Returns the new donation id (or -1 on failure) and a status message.
 CREATE OR REPLACE PROCEDURE AddDonation(
     p_user_id      IN  NUMBER,
     p_food_type    IN  VARCHAR2,
@@ -44,9 +33,6 @@ EXCEPTION
 END AddDonation;
 /
 
-
--- Claims an available donation for an NGO and logs the action to audit_log.
--- Uses SELECT FOR UPDATE to prevent concurrent double-claims.
 CREATE OR REPLACE PROCEDURE ClaimDonation(
     p_donation_id  IN  NUMBER,
     p_ngo_user_id  IN  NUMBER,
@@ -93,9 +79,6 @@ EXCEPTION
 END ClaimDonation;
 /
 
-
--- Iterates over all Available donations past their expiry time,
--- marks each as Expired, and writes an audit entry per record.
 CREATE OR REPLACE PROCEDURE ExpireOldDonations(p_expired_count OUT NUMBER) IS
     v_count NUMBER := 0;
     CURSOR expired_cursor IS
@@ -124,8 +107,23 @@ EXCEPTION
 END ExpireOldDonations;
 /
 
+CREATE OR REPLACE PROCEDURE GetExpiredDonations(p_cursor OUT SYS_REFCURSOR) IS
+BEGIN
+    OPEN p_cursor FOR
+        SELECT
+            fd.id,
+            u.restaurant_name,
+            fd.food_type,
+            fd.quantity,
+            fd.expiry_time,
+            fd.created_at
+        FROM food_donations fd
+        INNER JOIN users u ON fd.user_id = u.id
+        WHERE fd.status = 'Expired'
+        ORDER BY fd.expiry_time DESC;
+END GetExpiredDonations;
+/
 
--- Returns a REF CURSOR with a summary report for a given restaurant user.
 CREATE OR REPLACE PROCEDURE GetRestaurantReport(
     p_user_id IN  NUMBER,
     p_cursor  OUT SYS_REFCURSOR
@@ -146,12 +144,6 @@ BEGIN
 END GetRestaurantReport;
 /
 
-
--- ----------------------------------------------------------------
--- FUNCTIONS
--- ----------------------------------------------------------------
-
--- Returns the total number of donations made by a given user.
 CREATE OR REPLACE FUNCTION GetTotalDonations(p_user_id IN NUMBER)
 RETURN NUMBER IS
     v_count NUMBER;
@@ -163,8 +155,6 @@ BEGIN
 END GetTotalDonations;
 /
 
-
--- Returns the total quantity of Claimed donations for a given user.
 CREATE OR REPLACE FUNCTION GetClaimedQuantity(p_user_id IN NUMBER)
 RETURN NUMBER IS
     v_total NUMBER;
@@ -177,8 +167,6 @@ BEGIN
 END GetClaimedQuantity;
 /
 
-
--- Returns 1 if the donation is Available and not yet expired, else 0.
 CREATE OR REPLACE FUNCTION IsDonationClaimable(p_donation_id IN NUMBER)
 RETURN NUMBER IS
     v_status  VARCHAR2(20);
@@ -200,12 +188,6 @@ EXCEPTION
 END IsDonationClaimable;
 /
 
-
--- ----------------------------------------------------------------
--- TRIGGERS
--- ----------------------------------------------------------------
-
--- Rejects inserts where quantity <= 0 or expiry_time is in the past.
 CREATE OR REPLACE TRIGGER trg_before_donation_insert
 BEFORE INSERT ON food_donations
 FOR EACH ROW
@@ -219,8 +201,6 @@ BEGIN
 END;
 /
 
-
--- Writes an INSERT audit entry for every new food_donation row.
 CREATE OR REPLACE TRIGGER trg_after_donation_insert
 AFTER INSERT ON food_donations
 FOR EACH ROW
@@ -230,8 +210,6 @@ BEGIN
 END;
 /
 
-
--- Logs any status change on a food_donation row to audit_log.
 CREATE OR REPLACE TRIGGER trg_after_donation_update
 AFTER UPDATE ON food_donations
 FOR EACH ROW
@@ -243,8 +221,6 @@ BEGIN
 END;
 /
 
-
--- Prevents deletion of donations that have already been claimed.
 CREATE OR REPLACE TRIGGER trg_before_donation_delete
 BEFORE DELETE ON food_donations
 FOR EACH ROW

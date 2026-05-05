@@ -375,7 +375,7 @@ GROUP BY u.id, u.restaurant_name;
 
 ### 9.2 Oracle PL/SQL Stored Procedures, Functions, Triggers & Cursors
 
-**Stored Procedures (4 implemented):**
+**Stored Procedures (5 implemented):**
 
 **1. AddDonation** — Validates input and inserts a donation; uses `RETURNING INTO` to capture the generated ID:
 ```sql
@@ -462,7 +462,21 @@ EXCEPTION
 END ExpireOldDonations;
 ```
 
-**4. GetRestaurantReport** — Returns an aggregated summary via a `SYS_REFCURSOR` OUT parameter.
+**4. GetExpiredDonations** — Returns all expired donations with restaurant details via a `SYS_REFCURSOR` OUT parameter:
+```sql
+CREATE OR REPLACE PROCEDURE GetExpiredDonations(p_cursor OUT SYS_REFCURSOR) IS
+BEGIN
+    OPEN p_cursor FOR
+        SELECT fd.id, u.restaurant_name, fd.food_type,
+               fd.quantity, fd.expiry_time, fd.created_at
+        FROM food_donations fd
+        INNER JOIN users u ON fd.user_id = u.id
+        WHERE fd.status = 'Expired'
+        ORDER BY fd.expiry_time DESC;
+END GetExpiredDonations;
+```
+
+**5. GetRestaurantReport** — Returns an aggregated summary via a `SYS_REFCURSOR` OUT parameter.
 ```sql
 CREATE OR REPLACE PROCEDURE GetRestaurantReport(
     p_user_id IN  NUMBER,
@@ -633,7 +647,7 @@ The `UNIQUE KEY uq_one_claim (donation_id)` in `donation_claims` provides an add
 
 - A properly structured, fully normalised (3NF) relational database with 4 tables
 - Complete SQL implementation: DDL (CREATE, ALTER, DROP), DML (INSERT, UPDATE, DELETE), and advanced SELECT (JOINs, subqueries, aggregates, GROUP BY, HAVING, Views)
-- 4 stored procedures provided in the SQL script for core database workflows
+- 5 stored procedures provided in the SQL script for core database workflows
 - 3 user-defined functions for data querying
 - 4 database triggers for input validation and audit logging
 - Cursor-based batch processing for expiry management
