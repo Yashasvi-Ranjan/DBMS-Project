@@ -463,6 +463,25 @@ END ExpireOldDonations;
 ```
 
 **4. GetRestaurantReport** — Returns an aggregated summary via a `SYS_REFCURSOR` OUT parameter.
+```sql
+CREATE OR REPLACE PROCEDURE GetRestaurantReport(
+    p_user_id IN  NUMBER,
+    p_cursor  OUT SYS_REFCURSOR
+) IS
+BEGIN
+    OPEN p_cursor FOR
+        SELECT
+            u.restaurant_name,
+            COUNT(fd.id)                                              AS total_donations,
+            COALESCE(SUM(fd.quantity), 0)                            AS total_quantity,
+            SUM(CASE WHEN fd.status = 'Available' THEN 1 ELSE 0 END) AS available,
+            SUM(CASE WHEN fd.status = 'Claimed'   THEN 1 ELSE 0 END) AS claimed,
+            SUM(CASE WHEN fd.status = 'Expired'   THEN 1 ELSE 0 END) AS expired
+        FROM users u
+        LEFT JOIN food_donations fd ON u.id = fd.user_id
+        WHERE u.id = p_user_id
+        GROUP BY u.id, u.restaurant_name;
+END GetRestaurantReport;
 
 ---
 
